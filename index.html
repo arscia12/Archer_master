@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>filagaming archery - firebase</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <style>
+        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        canvas { display: block; margin: 0 auto; background: linear-gradient(#87CEEB, #228B22); }
+        .ui-header { position: absolute; top: 0; width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.85); padding: 12px 0; font-weight: bold; z-index: 10; border-bottom: 2px solid #0088ff; }
+        #prizeColumn { position: absolute; right: 15px; top: 70px; width: 160px; background: rgba(0,0,0,0.8); border: 2px solid #0088ff; border-radius: 10px; padding: 10px; z-index: 5; font-size: 13px; }
+        #loginOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .login-box { background: #222; padding: 30px; border-radius: 15px; border: 2px solid #0088ff; text-align: center; }
+        input { padding: 12px; margin-bottom: 15px; width: 80%; background: #000; color: white; border: 1px solid #444; }
+        .btn-play { background: #0088ff; color: white; padding: 15px; border: none; width: 100%; font-weight: bold; cursor: pointer; }
+        #resultOverlay { position: fixed; top: 25%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); padding: 25px; border-radius: 15px; border: 3px solid #0f0; display: none; text-align: center; z-index: 20; }
+    </style>
+</head>
+<body>
+
+    <div id="loginOverlay">
+        <div class="login-box">
+            <h2 style="color: #0088ff;">filagaming</h2>
+            <input type="text" id="playerName" placeholder="member name...">
+            <button class="btn-play" onclick="login()">enter game</button>
+        </div>
+    </div>
+
+    <div class="ui-header">
+        <div>coins: <span id="coinDisplay" style="color: #0f0;">0</span></div>
+        <div>wind: <span id="windDisplay" style="color: #ff4444;">0.0</span></div>
+        <div id="timer" style="color: #fc0;">locked</div>
+    </div>
+
+    <div id="resultOverlay">
+        <div id="hitRing" style="color:#aaa;">ring: 0</div>
+        <div id="hitPrize" style="font-size: 42px;">prize: 0</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+// --- FIREBASE CONFIG ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAMnrO780tTvrJKbmavBbJ6ztRok-RUQnI",
+  authDomain: "chatapp-53b95.firebaseapp.com",
+  projectId: "chatapp-53b95",
+  storageBucket: "chatapp-53b95.firebasestorage.app",
+  messagingSenderId: "407903743547",
+  appId: "1:407903743547:web:7fc154a755b155125bb61e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// --- GAME LOGIC ---
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+let activePlayer = "", currentCoins = 0;
+let baseWind = 4.1 + (Math.random() * 15.9); 
+let arrow = null, lastHit = null, timeLeft = 3.0, isCounting = false;
+let touchX = canvas.width/2, touchY = canvas.height/2, aimX = touchX, aimY = touchY;
+
+function login() {
+    const name = document.getElementById("playerName").value.trim().toLowerCase();
+    if (!name) return;
+    activePlayer = name;
+    
+    // Sync coins LIVE from Firebase
+    db.ref('wallets/' + activePlayer).on('value', (snap) => {
+        currentCoins = snap.val() || 0;
+        document.getElementById("coinDisplay").innerText = currentCoins;
+    });
+    
+    document.getElementById("loginOverlay").style.display = "none";
+}
+
+function handleInput(e) {
+    if (!activePlayer) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    touchX = clientX; touchY = clientY;
+    if (currentCoins > 0 && !isCounting && !arrow && !lastHit) { isCounting = true; timeLeft = 3.0; }
+}
+canvas.addEventListener("mousemove", handleInput);
+canvas.addEventListener("touchstart", handleInput);
+
+function drawTarget(x, y, radius, scale) {
+    const colors = ["#fff","#fff","#000","#000","#0099ff","#0099ff","#ff0000","#ff0000","#ffff00","#ffff00"];
+    for(let i=0; i<10; i++) {
+        let r = (radius - (i * (radius/10))) * scale;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+        ctx.fillStyle = colors[i]; ctx.fill(); ctx.strokeStyle = "#444"; ctx.stroke();
+        ctx.fillStyle = (i > 1 && i < 6) ? "white" : "black";
+        ctx.font = `bold ${8 * scale}px Arial`; ctx.textAlign = "center";
+        ctx.fillText(i + 1, x - r + (6 * scale), y + (3 * scale));
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById("windDisplay").innerText = baseWind.toFixed(1);
+
+    ctx.save();
+    const tX = canvas.width / 2, tY = canvas.height / 2.5 - 20;
+    drawTarget(tX, tY, 100, 1.0);
+
+    if (arrow) {
+        arrow.z -= 0.015; arrow.x += (baseWind / 40) * (1 - arrow.z) * 12;
+        ctx.strokeStyle = "brown"; ctx.lineWidth = 6 * arrow.z;
+        ctx.beginPath(); ctx.moveTo(arrow.x, arrow.y); ctx.lineTo(arrow.x, arrow.y + (30 * arrow.z)); ctx.stroke();
+        
+        if (arrow.z <= 0.1) {
+            const dist = Math.sqrt(Math.pow(arrow.x - tX, 2) + Math.pow(arrow.y - tY, 2));
+            let pts = Math.max(0, 10 - Math.floor(dist / 10));
+            let pz = (pts >= 9) ? "25.000" : (pts >= 5) ? "10.000" : (pts >= 1) ? "5.000" : "ZONK";
+            if(pts === 7 || pts === 8 || pts === 3 || pts === 4) pz = "ZONK";
+
+            // SAVE WIN TO FIREBASE
+            db.ref('archery_wins').push({
+                name: activePlayer, prize: pz, time: new Date().toLocaleString(),
+                shot: { wind: baseWind, aimX: arrow.startX, aimY: arrow.startY }
+            });
+
+            lastHit = { x: arrow.x, y: arrow.y }; arrow = null;
+            document.getElementById("hitPrize").innerText = pz;
+            document.getElementById("resultOverlay").style.display = "block";
+            setTimeout(() => { 
+                isCounting = false; 
+                baseWind = (Math.random() < 0.15 ? Math.random()*4 : 4.1+Math.random()*15.9) * (Math.random()<0.5?-1:1);
+                lastHit = null; 
+                document.getElementById("resultOverlay").style.display = "none";
+            }, 3000);
+        }
+    }
+    ctx.restore();
+
+    if (activePlayer && currentCoins > 0 && !arrow && !lastHit) {
+        if (isCounting) {
+            timeLeft -= 1/60; document.getElementById("timer").innerText = "fire: " + Math.max(0, timeLeft).toFixed(1);
+            if (timeLeft <= 0) {
+                isCounting = false;
+                db.ref('wallets/' + activePlayer).set(currentCoins - 1); // Deduct Firebase
+                arrow = { x: aimX, y: aimY, z: 1.0, startX: aimX, startY: aimY }; 
+            }
+        }
+        aimX += (touchX - aimX) * 0.09; aimY += (touchY - aimY) * 0.09;
+        ctx.strokeStyle = "white"; ctx.beginPath(); ctx.arc(aimX, aimY, 25, 0, Math.PI*2); ctx.stroke();
+    }
+    requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>
