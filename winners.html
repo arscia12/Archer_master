@@ -1,24 +1,41 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>filagaming - winners list</title>
+    <title>filagaming - winners database</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #121212; color: #eee; font-family: sans-serif; padding: 30px; }
-        .member-card { background: #1e1e1e; border: 1px solid #333; padding: 20px; border-radius: 10px; margin-bottom: 15px; }
-        .win-log { font-size: 13px; display: flex; justify-content: space-between; border-top: 1px solid #222; padding: 8px 0; margin-top: 5px; }
-        .prize-tag { color: #0f0; font-weight: bold; }
-        .back { color: #0088ff; text-decoration: none; margin-bottom: 20px; display: inline-block; }
+        :root { --primary: #0088ff; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 30px; margin: 0; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .back-link { color: var(--primary); text-decoration: none; font-size: 14px; display: inline-block; margin-bottom: 20px; }
+        h2 { color: var(--primary); margin-bottom: 25px; text-transform: lowercase; }
+        
+        .member-card { background: var(--card); border: 1px solid #333; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .member-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px; }
+        .member-name { font-size: 20px; font-weight: bold; color: var(--primary); text-transform: uppercase; }
+        .win-count { font-size: 14px; color: #777; }
+
+        .win-row { display: grid; grid-template-columns: 1.5fr 1fr 0.5fr; padding: 10px 0; border-bottom: 1px solid #222; font-size: 14px; }
+        .win-row:last-child { border-bottom: none; }
+        .prize-tag { font-weight: bold; text-align: center; }
+        .wind-tag { color: #555; text-align: right; }
     </style>
 </head>
 <body>
-    <a href="admin.html" class="back">← back to admin</a>
-    <h2 style="color:#0088ff;">winning ids database</h2>
-    <div id="list">loading...</div>
+
+<div class="container">
+    <a href="admin.html" class="back-link">← back to admin</a>
+    <h2 id="pageTitle">winning ids database</h2>
+    
+    <div id="list">
+        <p style="text-align:center; color:#555;">loading all winners from firebase...</p>
+    </div>
+</div>
 
 <script>
-firebase.initializeApp({
+// --- FIREBASE CONFIG ---
+const firebaseConfig = {
   apiKey: "AIzaSyAMnrO780tTvrJKbmavBbJ6ztRok-RUQnI",
   authDomain: "chatapp-53b95.firebaseapp.com",
   databaseURL: "https://chatapp-53b95-default-rtdb.firebaseio.com",
@@ -26,30 +43,53 @@ firebase.initializeApp({
   storageBucket: "chatapp-53b95.firebasestorage.app",
   messagingSenderId: "407903743547",
   appId: "1:407903743547:web:7fc154a755b155125bb61e"
-});
+};
+firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-db.ref('archery_wins').once('value', (snap) => {
-    if(!snap.exists()) { document.getElementById("list").innerHTML = "No winners yet."; return; }
+// Load ALL wins
+db.ref('archery_wins').on('value', (snap) => {
+    const listContainer = document.getElementById("list");
     
-    const wins = []; snap.forEach(c => wins.push(c.val()));
-    const grouped = wins.reduce((acc, w) => {
-        if(!acc[w.name]) acc[w.name] = [];
-        acc[w.name].push(w); return acc;
+    if (!snap.exists()) {
+        listContainer.innerHTML = "<p style='text-align:center; color:#555;'>no records found in the database yet.</p>";
+        return;
+    }
+
+    const allWins = [];
+    snap.forEach(child => {
+        allWins.push(child.val());
+    });
+
+    // Group wins by member name
+    const grouped = allWins.reduce((acc, win) => {
+        const name = win.name.toLowerCase();
+        if (!acc[name]) acc[name] = [];
+        acc[name].push(win);
+        return acc;
     }, {});
 
-    document.getElementById("list").innerHTML = Object.keys(grouped).map(name => `
-        <div class="member-card">
-            <h3 style="margin:0 0 10px 0; color:#0088ff;">${name.toUpperCase()} <span style="color:#777; font-size:14px;">(${grouped[name].length} wins)</span></h3>
-            ${grouped[name].reverse().map(w => `
-                <div class="win-log">
-                    <span>${w.time}</span>
-                    <span class="prize-tag">${w.prize}</span>
-                    <span style="color:#555;">W: ${w.shot.wind.toFixed(1)}</span>
+    // Render the cards
+    listContainer.innerHTML = Object.keys(grouped).map(name => {
+        const memberWins = grouped[name].reverse(); // Newest wins first for this person
+        return `
+            <div class="member-card">
+                <div class="member-header">
+                    <span class="member-name">${name}</span>
+                    <span class="win-count">(${memberWins.length} total wins)</span>
                 </div>
-            `).join('')}
-        </div>
-    `).join('');
+                ${memberWins.map(w => `
+                    <div class="win-row">
+                        <span style="color:#aaa;">${w.time}</span>
+                        <span class="prize-tag" style="color:${w.prize === 'ZONK' ? '#ff4444' : '#4caf50'};">
+                            ${w.prize}
+                        </span>
+                        <span class="wind-tag">W: ${w.shot ? w.shot.wind.toFixed(1) : '0.0'}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }).join('');
 });
 </script>
 </body>
