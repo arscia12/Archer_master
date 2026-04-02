@@ -1,54 +1,117 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>FILAGAMING - Member Directory</title>
+    <title>filagaming - member profiles</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; padding: 20px; }
-        .directory-container { background: #222; border: 2px solid #0088ff; border-radius: 12px; padding: 25px; width: 480px; margin: 0 auto; }
-        .nav-bar { display: flex; justify-content: space-between; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; color: #aaa; border-bottom: 2px solid #333; padding: 10px; }
-        td { padding: 12px 10px; border-bottom: 1px solid #333; }
-        .balance { color: #00ff00; font-weight: bold; text-align: right; }
-        .back-btn { background: #111; color: #0088ff; border: 1px solid #0088ff; padding: 5px 15px; cursor: pointer; border-radius: 4px; text-decoration: none; font-size: 14px; }
+        :root { --primary: #0088ff; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        h2 { color: var(--primary); border-bottom: 2px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .search-box { width: 100%; padding: 12px; background: #000; border: 1px solid #444; color: white; border-radius: 8px; margin-bottom: 20px; box-sizing: border-box; }
+        
+        .member-item { background: var(--card); padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
+        .member-item:hover { border-color: var(--primary); }
+        .member-info { display: flex; flex-direction: column; }
+        .member-name { font-weight: bold; font-size: 16px; color: var(--primary); }
+        .member-status { font-size: 12px; color: #777; margin-top: 4px; }
+        
+        .coin-badge { background: #2e7d32; color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 14px; }
+        .zero-coins { background: #c62828; }
+
+        .back-link { display: inline-block; margin-bottom: 20px; color: var(--primary); text-decoration: none; font-size: 14px; }
+        .stats { font-size: 14px; color: #aaa; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="directory-container">
-        <div class="nav-bar">
-            <a href="admin.html" class="back-btn">← BACK TO ADMIN</a>
-            <span style="color: #444; font-weight: bold;">LIVE DIRECTORY</span>
-        </div>
-        
-        <h2>Member Balances</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>USERNAME</th>
-                    <th style="text-align: right;">BALANCE</th>
-                </tr>
-            </thead>
-            <tbody id="memberList"></tbody>
-        </table>
+<div class="container">
+    <a href="admin.html" class="back-link">← back to admin dashboard</a>
+    <h2>
+        member directory
+        <span id="memberCount" style="font-size: 14px; color: #777;">0 members</span>
+    </h2>
+    
+    <div class="stats" id="totalCoins">total coins in circulation: 0</div>
+    <input type="text" id="searchInput" class="search-box" placeholder="search by name..." onkeyup="filterMembers()">
+
+    <div id="memberContainer">
+        <p style="text-align:center; color:#555;">loading database...</p>
     </div>
+</div>
 
 <script>
-    function refreshTable() {
-        const walletData = JSON.parse(localStorage.getItem("archery_wallets")) || {};
-        const memberNames = Object.keys(walletData);
-        const tbody = document.getElementById("memberList");
+// --- FIREBASE CONFIG ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAMnrO780tTvrJKbmavBbJ6ztRok-RUQnI",
+  authDomain: "chatapp-53b95.firebaseapp.com",
+  databaseURL: "https://chatapp-53b95-default-rtdb.firebaseio.com",
+  projectId: "chatapp-53b95",
+  storageBucket: "chatapp-53b95.firebasestorage.app",
+  messagingSenderId: "407903743547",
+  appId: "1:407903743547:web:7fc154a755b155125bb61e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-        tbody.innerHTML = memberNames.map(name => `
-            <tr>
-                <td style="font-weight: bold;">${name}</td>
-                <td class="balance">${walletData[name]} Coins</td>
-            </tr>
-        `).join("");
-    }
+let allMembers = [];
 
-    setInterval(refreshTable, 1000);
-    refreshTable();
+// Load Members from Firebase
+function loadMembers() {
+    db.ref('wallets').on('value', (snapshot) => {
+        const data = snapshot.val();
+        const container = document.getElementById("memberContainer");
+        
+        if (!data) {
+            container.innerHTML = "<p style='text-align:center; color:#555;'>no members found in database.</p>";
+            return;
+        }
+
+        allMembers = Object.keys(data).map(name => ({
+            name: name,
+            coins: data[name]
+        }));
+
+        // Sort alphabetically
+        allMembers.sort((a, b) => a.name.localeCompare(b.name));
+
+        renderList(allMembers);
+        updateStats(allMembers);
+    });
+}
+
+function renderList(list) {
+    const container = document.getElementById("memberContainer");
+    container.innerHTML = list.map(m => `
+        <div class="member-item">
+            <div class="member-info">
+                <span class="member-name">${m.name}</span>
+                <span class="member-status">registered member</span>
+            </div>
+            <div class="coin-badge ${m.coins === 0 ? 'zero-coins' : ''}">
+                ${m.coins} coins
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateStats(list) {
+    document.getElementById("memberCount").innerText = list.length + " members";
+    const total = list.reduce((sum, m) => sum + (m.coins || 0), 0);
+    document.getElementById("totalCoins").innerText = "total coins in circulation: " + total;
+}
+
+function filterMembers() {
+    const query = document.getElementById("searchInput").value.toLowerCase();
+    const filtered = allMembers.filter(m => m.name.toLowerCase().includes(query));
+    renderList(filtered);
+}
+
+// Start listener
+loadMembers();
 </script>
 </body>
 </html>

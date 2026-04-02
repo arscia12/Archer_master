@@ -1,26 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>filagaming - winners</title>
+    <title>filagaming - winners list</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
-        body { background: #121212; color: #e0e0e0; font-family: sans-serif; padding: 20px; }
-        .card { background: #1e1e1e; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
-        .win-row { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid #222; font-size: 13px; }
-        .btn-back { color: #0088ff; text-decoration: none; display: block; margin-bottom: 20px; }
+        body { background: #121212; color: #eee; font-family: sans-serif; padding: 30px; }
+        .member-card { background: #1e1e1e; border: 1px solid #333; padding: 20px; border-radius: 10px; margin-bottom: 15px; }
+        .win-log { font-size: 13px; display: flex; justify-content: space-between; border-top: 1px solid #222; padding: 8px 0; margin-top: 5px; }
+        .prize-tag { color: #0f0; font-weight: bold; }
+        .back { color: #0088ff; text-decoration: none; margin-bottom: 20px; display: inline-block; }
     </style>
 </head>
 <body>
-    <a href="admin.html" class="btn-back">← back to admin</a>
-    <h2 style="color:#0088ff;">winning ids hall of fame</h2>
-    <div id="list">loading winners...</div>
+    <a href="admin.html" class="back">← back to admin</a>
+    <h2 style="color:#0088ff;">winning ids database</h2>
+    <div id="list">loading...</div>
 
 <script>
-firebase.initializeApp({ /* SAME CONFIG AS ABOVE */ });
+firebase.initializeApp({
+  apiKey: "AIzaSyAMnrO780tTvrJKbmavBbJ6ztRok-RUQnI",
+  authDomain: "chatapp-53b95.firebaseapp.com",
+  databaseURL: "https://chatapp-53b95-default-rtdb.firebaseio.com",
+  projectId: "chatapp-53b95",
+  storageBucket: "chatapp-53b95.firebasestorage.app",
+  messagingSenderId: "407903743547",
+  appId: "1:407903743547:web:7fc154a755b155125bb61e"
+});
 const db = firebase.database();
 
 db.ref('archery_wins').once('value', (snap) => {
+    if(!snap.exists()) { document.getElementById("list").innerHTML = "No winners yet."; return; }
+    
     const wins = []; snap.forEach(c => wins.push(c.val()));
     const grouped = wins.reduce((acc, w) => {
         if(!acc[w.name]) acc[w.name] = [];
@@ -28,13 +39,13 @@ db.ref('archery_wins').once('value', (snap) => {
     }, {});
 
     document.getElementById("list").innerHTML = Object.keys(grouped).map(name => `
-        <div class="card">
-            <div style="font-weight:bold; color:#0088ff; margin-bottom:10px;">${name} (${grouped[name].length} wins)</div>
+        <div class="member-card">
+            <h3 style="margin:0 0 10px 0; color:#0088ff;">${name.toUpperCase()} <span style="color:#777; font-size:14px;">(${grouped[name].length} wins)</span></h3>
             ${grouped[name].reverse().map(w => `
-                <div class="win-row">
+                <div class="win-log">
                     <span>${w.time}</span>
-                    <span style="color:#0f0;">${w.prize}</span>
-                    <span style="color:#777;">Wind: ${w.shot.wind.toFixed(1)}</span>
+                    <span class="prize-tag">${w.prize}</span>
+                    <span style="color:#555;">W: ${w.shot.wind.toFixed(1)}</span>
                 </div>
             `).join('')}
         </div>
